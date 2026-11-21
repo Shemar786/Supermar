@@ -53,6 +53,7 @@
     sLfo.connect(sDepth); sDepth.connect(sir.frequency); sLfo.start();
     const sirG = ctx.createGain(); sirG.gain.value = 0; sir.connect(sirG); sirG.connect(master); sir.start();
     n = { master, lp, eng, o1, o2, o3, tw, twg, skid, wind, rumble, nitro, nb, sirG };
+    A.master = master; // the song plays through the master volume, so mute covers it
   };
 
   A.siren = function (level) {

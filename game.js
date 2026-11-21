@@ -14,11 +14,16 @@
   const DIFF = { easy: { skill: 0.84, perf: 0.9 }, pro: { skill: 0.94, perf: 0.97 }, legend: { skill: 1.0, perf: 1.0 } };
   const PLAYER_PERF = { top: 80, accel: 15.5, brake: 30, grip: 23, boostTop: 17 };
 
-  const settings = { laps: 3, diff: 'pro', mode: 'chase' };
+  const STEER_ORDER = ['tilt', 'wheel', 'buttons'], STEER_NAMES = { tilt: 'Tilt', wheel: 'Wheel', buttons: 'Buttons' };
+  const MUSIC_ORDER = ['on', 'off'], MUSIC_NAMES = { on: 'On', off: 'Off' };
+  const settings = { laps: 3, diff: 'pro', mode: 'chase', steer: 'tilt', autoGas: false, music: 'on' };
   try {
     const s = JSON.parse(localStorage.getItem('supermar-settings') || '{}');
     if (s.laps) settings.laps = s.laps; if (DIFF[s.diff]) settings.diff = s.diff; if (s.mode === 'race' || s.mode === 'chase') settings.mode = s.mode;
+    if (STEER_ORDER.includes(s.steer)) settings.steer = s.steer; if (typeof s.autoGas === 'boolean') settings.autoGas = s.autoGas;
+    if (s.music === 'off') settings.music = 'off';
   } catch (e) { /* defaults */ }
+  let tiltBlocked = false;
   let bestScore = 0;
   try { bestScore = +localStorage.getItem('supermar-best') || 0; } catch (e) { /* none saved */ }
 
@@ -35,10 +40,13 @@
   const scene = new T.Scene();
   const camera = new T.PerspectiveCamera(62, 1, 0.3, 9000);
   function resize() {
-    const w = window.innerWidth, h = window.innerHeight;
+    SM.touch.layout();
+    const w = SM.view.w, h = SM.view.h;
     renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
   }
-  window.addEventListener('resize', resize); resize();
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', () => setTimeout(resize, 250));
+  resize();
 
   const world = SM.buildWorld(scene, renderer);
   const tr = SM.track;
@@ -50,6 +58,7 @@
   const pm = SM.makeSupermar(); scene.add(pm.root);
   const player = SM.createCar({ name: 'You', car: 'Supermar', color: '#d7192a', isPlayer: true, model: pm, perf: Object.assign({}, PLAYER_PERF) });
   player.ai = { skill: 0.82, bias: 0, lane: 0, wobble: 0, ph: 0, nitroCd: 99, stuckT: 0 };
+  SM.player = player;
   const cars = [player];
   RIVALS.forEach((r, k) => {
     const model = SM.makeRival(r.color, r.style, r.name);
@@ -96,10 +105,47 @@
   SM.chase.build(cityScene, player);
   const activeCars = () => (SM.cityMode ? SM.chase.cars : cars);
 
+  // ---------------- tyre marks: a ring buffer of thin quads laid behind sliding rear wheels ----------------
+  const MARKS = 1400;
+  const markPos = new Float32Array(MARKS * 12), markIdx = new Uint16Array(MARKS * 6);
+  for (let i = 0; i < MARKS; i++) { const v = i * 4; markIdx.set([v, v + 1, v + 2, v + 1, v + 3, v + 2], i * 6); }
+  const markGeo = new T.BufferGeometry();
+  markGeo.setAttribute('position', new T.BufferAttribute(markPos, 3).setUsage(T.DynamicDrawUsage));
+  markGeo.setIndex(new T.BufferAttribute(markIdx, 1));
+  const marks = new T.Mesh(markGeo, new T.MeshBasicMaterial({
+    color: 0x0c0c0c, transparent: true, opacity: 0.4, depthWrite: false, side: T.DoubleSide,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+  }));
+  marks.frustumCulled = false; marks.renderOrder = 1;
+  let markI = 0, marksDirty = false;
+  function markSeg(ax, az, bx, bz) {
+    const dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz);
+    if (L < 1e-3) return;
+    const nx = (-dz / L) * 0.14, nz = (dx / L) * 0.14, o = markI * 12;
+    markPos.set([ax + nx, 0, az + nz, ax - nx, 0, az - nz, bx + nx, 0, bz + nz, bx - nx, 0, bz - nz], o);
+    markI = (markI + 1) % MARKS; marksDirty = true;
+  }
+  function tyreMarks(c) {
+    const sp = Math.hypot(c.vx, c.vz);
+    if (!((c.drifting || c.skid > 0.55) && sp > 5 && !c.offroad)) { c.mark = null; return; }
+    const [lx, , lz] = W(c, -1.0, 0, -1.55), [rx, , rz] = W(c, 1.0, 0, -1.55);
+    const m = c.mark;
+    if (!m) { c.mark = [lx, lz, rx, rz]; return; }
+    if ((lx - m[0]) ** 2 + (lz - m[1]) ** 2 < 0.3) return;
+    markSeg(m[0], m[1], lx, lz); markSeg(m[2], m[3], rx, rz);
+    m[0] = lx; m[1] = lz; m[2] = rx; m[3] = rz;
+  }
+  function clearMarks() {
+    markPos.fill(0); markI = 0; marksDirty = true;
+    for (const c of cars) c.mark = null;
+    for (const c of SM.chase.cars) c.mark = null;
+  }
+
   function setScene(kind) {
     const city = kind === 'chase';
     activeScene = city ? cityScene : scene; activeWorld = city ? cityWorld : world;
-    activeScene.add(pm.root); activeScene.add(fxGroup);
+    activeScene.add(pm.root); activeScene.add(fxGroup); activeScene.add(marks);
+    marks.position.y = city ? 0.045 : 0.075; clearMarks();
     SM.cityMode = city;
     SM.ui.setMinimap(city ? 'city' : 'race');
     document.body.classList.toggle('mode-chase', city); document.body.classList.toggle('mode-race', !city);
@@ -122,13 +168,22 @@
           1.2, 0.9 + Math.random() * 0.5, c.offroad ? '#b8a27a' : '#eceae4', false, 3.2);
       }
     }
+    // drift sparks off the rear tyres, coloured by how charged the mini turbo is
+    if (c.drifting && c.driftTier > 0 && sp > 8 && Math.random() < dt * 50) {
+      const col = SM.driftColors[c.driftTier];
+      for (const sx of [-1, 1]) {
+        const [x, y, z] = W(c, sx * 1.0, 0.22, -1.6);
+        spawn(x, y, z, c.vx * 0.35 + (Math.random() - 0.5) * 5, 1.2 + Math.random() * 2.2, c.vz * 0.35 + (Math.random() - 0.5) * 5,
+          0.28 + c.driftTier * 0.06, 0.2 + Math.random() * 0.12, col, true, -0.6);
+      }
+    }
     if (c.boosting || c.miniTurbo > 0) {
       const ex = c.model.exhausts;
       for (const e of ex) {
         if (Math.random() > dt * 70) continue;
         const [x, y, z] = W(c, e.x, e.y, e.z);
         spawn(x, y, z, c.vx - fx * 14, 0.3, c.vz - fz * 14, 0.55 + Math.random() * 0.3, 0.14,
-          c.miniTurbo > 0 && !c.boosting ? '#5fb8ff' : (Math.random() < 0.5 ? '#ff8a1e' : '#ffd14a'), true, -1.5);
+          c.miniTurbo > 0 && !c.boosting ? SM.driftColors[c.turboTier] : (Math.random() < 0.5 ? '#ff8a1e' : '#ffd14a'), true, -1.5);
       }
       if (c === player && c.boosting && Math.random() < dt * 50) {
         const [x, y, z] = W(c, 0, 1.2, -2.25);
@@ -224,8 +279,22 @@
     });
   }
 
+  // iPhone only lets a page read the tilt sensor after a tap, so this runs from Start and from the menu setting
+  function askTilt() {
+    SM.touch.askTilt().then(ok => {
+      tiltBlocked = !ok;
+      if (!ok && mode !== 'menu') SM.ui.flash('TILT IS OFF · DRAG THE WHEEL', '');
+      syncSettingsUI();
+    });
+  }
+
   function startRace() {
-    SM.audio.init();
+    SM.audio.init(); SM.music.setDriving(true);
+    if (SM.touch.active()) {
+      SM.touch.landscape();
+      if (settings.steer === 'tilt') { askTilt(); SM.touch.recenter(); }
+    }
+    clearMarks(); race.tiltCheck = false;
     player.perf = Object.assign({}, PLAYER_PERF);
     if (settings.mode === 'chase') SM.chase.reset();
     else { race.laps = settings.laps; applyDifficulty(); setupGrid(); }
@@ -233,17 +302,17 @@
     camYaw = player.h; camDist = 8; camH = 2.6;
     ['menu', 'results', 'pause', 'chaseEnd', 'help'].forEach(id => SM.ui.show(id, false));
     SM.ui.show('hud', true);
-    document.body.classList.add('racing');
+    document.body.classList.add('racing', 'counting');
     $('count').className = ''; $('count').textContent = '';
     mode = 'countdown';
     try { canvas.focus({ preventScroll: true }); } catch (e) { /* fine */ }
   }
 
   function toMenu() {
-    mode = 'menu'; SM.audio.silence();
+    mode = 'menu'; SM.audio.silence(); SM.music.setDriving(false);
     if (settings.mode === 'chase') SM.chase.reset(); else setupGrid();
     ['results', 'pause', 'hud', 'chaseEnd'].forEach(id => SM.ui.show(id, false));
-    SM.ui.show('menu', true); document.body.classList.remove('racing');
+    SM.ui.show('menu', true); document.body.classList.remove('racing', 'counting');
   }
 
   function togglePause() {
@@ -297,7 +366,10 @@
     } else c.wrongTime = 0;
     if (c.hit > 3) { shake = Math.min(1, shake + c.hit / 18); SM.audio.thud(c.hit); }
     for (const o of activeCars()) o.hit = 0;
-    for (const e of c.events) if (e === 'mini') { SM.ui.flash('MINI TURBO', 'blue'); SM.audio.miniTurbo(); }
+    for (const e of c.events) {
+      if (e === 'mini') { SM.ui.flash(SM.TURBO_NAMES[c.turboTier], ['', 'blue', 'orange', 'pink'][c.turboTier]); SM.audio.miniTurbo(); }
+      else if (e === 'tier') SM.audio.beep(520 + c.driftTier * 260, 0.08, 0.07);
+    }
     for (const o of activeCars()) o.events.length = 0;
     if (c.nitro > 0.98 && prevNitro <= 0.98 && !c.finished) SM.ui.flash('NITRO FULL', 'gold');
     prevNitro = c.nitro;
@@ -305,6 +377,10 @@
 
   function countdownStep(dt, pin) {
     race.cd += dt;
+    if (!race.tiltCheck && race.cd > 2 && SM.touch.active() && settings.steer === 'tilt') {
+      race.tiltCheck = true;
+      if (!SM.touch.tiltLive() && !tiltBlocked) SM.ui.flash('NO TILT SENSOR · DRAG THE WHEEL', '');
+    }
     // rev the V16 on the grid
     player.rpm += ((1000 + pin.throttle * 6800) - player.rpm) * Math.min(1, dt * 6);
     player.throttle = pin.throttle;
@@ -317,7 +393,7 @@
       if (shown >= 0 && shown < 3) { SM.ui.count(String(3 - shown)); SM.audio.beep(520, 0.18); }
       if (shown === 3) {
         SM.ui.count('GO', 'go'); SM.audio.beep(1040, 0.45, 0.2);
-        mode = 'race';
+        mode = 'race'; document.body.classList.remove('counting');
         if (pin.throttle > 0 && race.thrDownAt > 3.2) { player.miniTurbo = 1.1; SM.ui.flash('PERFECT START', 'blue'); SM.audio.miniTurbo(); }
         else if (pin.throttle > 0 && race.thrDownAt >= 0 && race.thrDownAt < 2.0) { player.rpm = 9000; SM.ui.flash('WHEELSPIN', ''); player.nitro = Math.max(0, player.nitro - 0.15); }
       }
@@ -355,7 +431,7 @@
     SM.ui.hud({
       pos: st.indexOf(c) + 1, lap: c.lap + 1, laps: race.laps, time: mode === 'countdown' ? 0 : (c.finished ? c.finishTime : race.time), best: c.bestLap,
       kmh: Math.abs(Math.sin(c.h) * c.vx + Math.cos(c.h) * c.vz) * 3.6, gear: c.gear, rpm: c.rpm, nitro: c.nitro, boosting: c.boosting,
-      draft: c.draft && !c.boosting, drifting: c.drifting, driftTime: c.driftTime, wrong: c.wrongTime > 1.2, board: rows
+      draft: c.draft && !c.boosting, drifting: c.drifting, driftTime: c.driftTime, driftTier: c.driftTier, wrong: c.wrongTime > 1.2, board: rows
     }, dt);
     SM.ui.minimap(cars, player);
     return rows;
@@ -365,7 +441,7 @@
     const c = player, st = SM.chase.st;
     SM.ui.chaseHud({
       kmh: Math.abs(Math.sin(c.h) * c.vx + Math.cos(c.h) * c.vz) * 3.6, gear: c.gear, rpm: c.rpm, nitro: c.nitro, boosting: c.boosting,
-      draft: false, drifting: c.drifting, driftTime: c.driftTime, wrong: false
+      draft: false, drifting: c.drifting, driftTime: c.driftTime, driftTier: c.driftTier, wrong: false
     }, SM.chase.hudData(), dt);
     SM.ui.minimap(SM.chase.cars, player, st.eagleOn && !st.over ? st.eagle : null);
   }
@@ -375,23 +451,44 @@
   // ---------------- title menu ----------------
   const DIFF_NAMES = { easy: 'Easy', pro: 'Pro', legend: 'Legend' }, DIFF_ORDER = ['easy', 'pro', 'legend'], LAP_OPTS = [2, 3, 5];
   let sel = settings.mode;
-  const menuItems = () => (settings.mode === 'race' ? ['chase', 'race', 'laps', 'diff', 'help'] : ['chase', 'race', 'help']);
+  const menuItems = () => [].concat(settings.mode === 'race' ? ['chase', 'race', 'laps', 'diff'] : ['chase', 'race'],
+    SM.music.available ? ['music'] : [], SM.touch.active() ? ['steer', 'autogas'] : [], ['help']);
+  const MUSIC_DETAIL = {
+    on: 'Your song plays here and on the results screen, with the words lighting up as they are sung. It stops while you drive.',
+    off: 'No music.'
+  };
+  const STEER_DETAIL = {
+    tilt: () => tiltBlocked
+      ? 'Tilt needs motion access. Reload the page and tap Allow when asked, or pick Wheel.'
+      : 'Tilt your phone like a steering wheel. You can also grab the wheel on the left to take over.',
+    wheel: () => 'Put your thumb on the left side of the screen and slide it left or right to turn the wheel.',
+    buttons: () => 'Two arrow buttons on the left. Simple, but less precise than tilt or the wheel.'
+  };
   const DETAIL = {
     chase: () => 'Downtown Kingston at sunset. Smash things for points, lose the police, and grab the Golden Eagle at 8,000 to win.',
     race: () => settings.laps + ' laps of the coast road against five rivals on ' + DIFF_NAMES[settings.diff] + '.',
+    steer: () => STEER_DETAIL[settings.steer](),
+    music: () => MUSIC_DETAIL[settings.music],
+    autogas: () => settings.autoGas ? 'The car accelerates by itself. Hold BRAKE to slow down or reverse.' : 'Hold GAS to go. DRIFT and NITRO keep the gas on too, so one thumb can drive.',
     help: () => 'Controls, points and tips.'
   };
   function syncSettingsUI() {
     document.querySelectorAll('#menuList .mi').forEach(el => el.classList.toggle('sel', el.dataset.item === sel));
     $('lapsVal').textContent = settings.laps;
     $('diffVal').textContent = DIFF_NAMES[settings.diff];
+    $('steerVal').textContent = STEER_NAMES[settings.steer];
+    $('gasVal').textContent = settings.autoGas ? 'On' : 'Off';
+    $('musicVal').textContent = MUSIC_NAMES[settings.music];
+    document.querySelector('#menuList [data-item=music]').hidden = !SM.music.available;
+    SM.touch.setMode(settings.steer);
+    SM.music.setOn(settings.music === 'on');
     $('bestNote').textContent = bestScore ? 'Best ' + bestScore.toLocaleString('en-US') : '';
     $('menuDetail').textContent = (DETAIL[sel] || DETAIL.race)();
     try { localStorage.setItem('supermar-settings', JSON.stringify(settings)); } catch (e) { /* not saved */ }
   }
   function selectItem(it) {
     sel = it;
-    const m = it === 'chase' ? 'chase' : it === 'help' ? settings.mode : 'race';
+    const m = it === 'chase' ? 'chase' : it === 'race' || it === 'laps' || it === 'diff' ? 'race' : settings.mode;
     if (m !== settings.mode) {
       settings.mode = m; setScene(m);
       if (m === 'chase') SM.chase.reset(); else setupGrid();
@@ -400,6 +497,14 @@
   }
   function stepOption(key, dir) {
     if (key === 'laps') settings.laps = LAP_OPTS[(LAP_OPTS.indexOf(settings.laps) + dir + LAP_OPTS.length) % LAP_OPTS.length];
+    else if (key === 'steer') {
+      settings.steer = STEER_ORDER[(STEER_ORDER.indexOf(settings.steer) + dir + STEER_ORDER.length) % STEER_ORDER.length];
+      if (settings.steer === 'tilt') askTilt();
+    } else if (key === 'autogas') settings.autoGas = !settings.autoGas;
+    else if (key === 'music') {
+      settings.music = MUSIC_ORDER[(MUSIC_ORDER.indexOf(settings.music) + dir + MUSIC_ORDER.length) % MUSIC_ORDER.length];
+      SM.audio.init();
+    }
     else settings.diff = DIFF_ORDER[(DIFF_ORDER.indexOf(settings.diff) + dir + DIFF_ORDER.length) % DIFF_ORDER.length];
     syncSettingsUI();
   }
@@ -409,7 +514,7 @@
     el.addEventListener('pointerenter', () => { if (mode === 'menu' && sel !== el.dataset.item) selectItem(el.dataset.item); });
     el.addEventListener('click', e => {
       if (e.target.closest('[data-step]')) return;
-      if (el.classList.contains('sub')) { selectItem(el.dataset.item); return; }
+      if (el.classList.contains('sub')) { selectItem(el.dataset.item); if (el.classList.contains('set')) stepOption(el.dataset.item, 1); return; }
       selectItem(el.dataset.item); activate(el.dataset.item);
     });
   });
@@ -425,7 +530,7 @@
     if (code === 'ArrowUp' || code === 'KeyW') { selectItem(items[(i - 1 + items.length) % items.length]); return true; }
     if (code === 'ArrowDown' || code === 'KeyS') { selectItem(items[(i + 1) % items.length]); return true; }
     const dir = code === 'ArrowLeft' || code === 'KeyA' ? -1 : code === 'ArrowRight' || code === 'KeyD' ? 1 : 0;
-    if (dir && (sel === 'laps' || sel === 'diff')) { stepOption(sel, dir); return true; }
+    if (dir && (sel === 'laps' || sel === 'diff' || sel === 'steer' || sel === 'autogas' || sel === 'music')) { stepOption(sel, dir); return true; }
     if (code === 'Enter' || code === 'Space') { activate(sel); return true; }
     if (code === 'KeyH') { openHelp(true); return true; }
     return false;
@@ -439,8 +544,14 @@
   $('restartBtn').addEventListener('click', startRace);
   $('quitBtn').addEventListener('click', toMenu);
   $('pauseBtn').addEventListener('click', togglePause);
-  const setMuteLabel = () => { $('muteBtn').textContent = SM.audio.muted ? 'Sound off' : 'Sound on'; $('muteBtn').setAttribute('aria-pressed', String(!SM.audio.muted)); };
-  $('muteBtn').addEventListener('click', () => { SM.audio.init(); SM.audio.setMuted(!SM.audio.muted); setMuteLabel(); });
+  const setMuteLabel = () => ['muteBtn', 'pauseMuteBtn'].forEach(id => {
+    $(id).textContent = SM.audio.muted ? 'Sound off' : 'Sound on'; $(id).setAttribute('aria-pressed', String(!SM.audio.muted));
+  });
+  ['muteBtn', 'pauseMuteBtn'].forEach(id => $(id).addEventListener('click', () => { SM.audio.init(); SM.audio.setMuted(!SM.audio.muted); setMuteLabel(); }));
+  // browsers only allow sound after a tap or key press, so the song starts on the first one
+  const wake = () => { SM.audio.init(); SM.music.start(); };
+  window.addEventListener('click', wake, true);
+  window.addEventListener('keydown', wake, true);
   const cycleCam = () => { camMode = (camMode + 1) % 3; SM.ui.flash(CAM_NAMES[camMode].toUpperCase(), ''); };
   $('camBtn').addEventListener('click', cycleCam);
   SM.onKey('KeyC', () => { if (mode === 'race' || mode === 'countdown' || mode === 'done') cycleCam(); });
@@ -466,6 +577,7 @@
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     const t = now / 1000;
     const pin = SM.input.read();
+    if (settings.autoGas && mode === 'race' && SM.touch.active() && !pin.brake) pin.throttle = 1;
 
     if (mode === 'race' || mode === 'done') {
       acc += dt; let n = 0;
@@ -484,12 +596,13 @@
     } else if (mode === 'countdown') countdownStep(dt, pin);
     else if (mode === 'menu' && SM.cityMode) SM.chase.frame(0, t);
 
-    for (const c of activeCars()) { syncModel(c, dt); if (mode === 'race' || mode === 'done') emit(c, dt); }
+    for (const c of activeCars()) { syncModel(c, dt); if (mode === 'race' || mode === 'done') { emit(c, dt); tyreMarks(c); } }
     updateParts(dt);
+    if (marksDirty) { markGeo.attributes.position.needsUpdate = true; marksDirty = false; }
 
     // in the menu, shift the view so the car sits beside the setup panel rather than behind it
-    const vw = window.innerWidth, vh = window.innerHeight;
-    if (mode === 'menu') { if (vw > 760) camera.setViewOffset(vw, vh, -vw * 0.16, vh * 0.1, vw, vh); else camera.setViewOffset(vw, vh, 0, vh * 0.22, vw, vh); }
+    const vw = SM.view.w, vh = SM.view.h;
+    if (mode === 'menu') { if (vw > 760 || vw > vh * 1.3) camera.setViewOffset(vw, vh, -vw * 0.16, vh * 0.1, vw, vh); else camera.setViewOffset(vw, vh, 0, vh * 0.22, vw, vh); }
     else if (camera.view && camera.view.enabled) camera.clearViewOffset();
 
     if (mode === 'menu') orbitCamera(t, 9.5, 2.3);
@@ -504,15 +617,18 @@
 
     if (mode !== 'menu' && mode !== 'paused') {
       const sp = Math.hypot(player.vx, player.vz);
-      SM.audio.update({ rpm: player.rpm, throttle: player.throttle, boost: player.boosting, speed: sp, skid: mode === 'countdown' ? 0 : player.skid, offroad: player.offroad }, dt);
-      SM.audio.siren(SM.cityMode && mode !== 'countdown' ? SM.chase.st.siren : 0);
+      // once the results card is up, the engine goes quiet so the song has the stage
+      if (!(mode === 'done' && race.doneT > 2.5)) {
+        SM.audio.update({ rpm: player.rpm, throttle: player.throttle, boost: player.boosting, speed: sp, skid: mode === 'countdown' ? 0 : player.skid, offroad: player.offroad }, dt);
+        SM.audio.siren(SM.cityMode && mode !== 'countdown' ? SM.chase.st.siren : 0);
+      }
       if (SM.cityMode) {
         chaseHud(dt);
         if (mode === 'done') {
           race.doneT += dt;
           if (race.doneT > 2.5 && $('chaseEnd').hidden) {
             SM.ui.chaseEnd(Object.assign(SM.chase.hudData(), { won: SM.chase.st.won }), bestScore);
-            SM.ui.show('chaseEnd', true); SM.ui.show('hud', false);
+            SM.ui.show('chaseEnd', true); SM.ui.show('hud', false); SM.audio.silence(); SM.music.setDriving(false);
           }
         }
       }
@@ -520,7 +636,7 @@
       if (mode === 'done' && !SM.cityMode) {
         race.doneT += dt; race.resultsT -= dt;
         if (race.doneT > 2.5) {
-          if ($('results').hidden) { SM.ui.show('results', true); SM.ui.show('hud', false); race.resultsT = 0; }
+          if ($('results').hidden) { SM.ui.show('results', true); SM.ui.show('hud', false); race.resultsT = 0; SM.audio.silence(); SM.music.setDriving(false); }
           if (race.resultsT <= 0) { race.resultsT = 0.5; SM.ui.results(rows, player, race.laps); }
         }
       }

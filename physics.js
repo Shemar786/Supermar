@@ -9,12 +9,18 @@
 
   SM.steerMax = v => 0.62 / (1 + Math.max(0, v) / 21);
 
+  // drift charge: hold a drift this long to reach each mini-turbo level, which then boosts for TURBO_T seconds
+  const DRIFT_TIER_T = [0.6, 1.5, 2.6];
+  const TURBO_T = [0, 0.6, 1.0, 1.5];
+  SM.driftColors = ['#f2f6ee', '#5fb8ff', '#ffa31a', '#e15bff'];
+  SM.TURBO_NAMES = ['', 'MINI TURBO', 'SUPER TURBO', 'ULTRA TURBO'];
+
   SM.createCar = function (o) {
     return {
       name: o.name, car: o.car, color: o.color, isPlayer: !!o.isPlayer, model: o.model,
       perf: o.perf, x: 0, z: 0, h: 0, vx: 0, vz: 0, steer: 0, yaw: 0,
       idx: 0, lat: 0, lap: -1, prog: 0, finished: false, finishTime: 0, lapStart: 0, bestLap: 0, lastLap: 0,
-      nitro: 0.4, boosting: false, drifting: false, driftDir: 0, driftTime: 0, miniTurbo: 0,
+      nitro: 0.4, boosting: false, drifting: false, driftDir: 0, driftTime: 0, driftTier: 0, miniTurbo: 0, turboTier: 1,
       rpm: 1000, gear: 1, offroad: false, skid: 0, hit: 0, draft: 0, wrongTime: 0, stuck: 0,
       lean: 0, pitch: 0, ax: 0, wheelRot: 0, throttle: 0, braking: false,
       ai: o.ai || null, events: []
@@ -48,14 +54,18 @@
     c.offroad = off;
 
     // drift / handbrake
-    if (!c.drifting && inp.drift && vF0 > 13 && Math.abs(c.steer) > 0.25) {
-      c.drifting = true; c.driftDir = Math.sign(c.steer); c.driftTime = 0;
+    if (!c.drifting && inp.drift && vF0 > 11 && Math.abs(c.steer) > 0.18) {
+      c.drifting = true; c.driftDir = Math.sign(c.steer); c.driftTime = 0; c.driftTier = 0;
     }
     if (c.drifting && (!inp.drift || vF0 < 8)) {
-      if (c.driftTime > 0.7 && vF0 > 8) { c.miniTurbo = Math.min(1.3, 0.35 + c.driftTime * 0.35); c.events.push('mini'); }
-      c.drifting = false;
+      if (c.driftTier > 0 && vF0 > 8) { c.miniTurbo = TURBO_T[c.driftTier]; c.turboTier = c.driftTier; c.events.push('mini'); }
+      c.drifting = false; c.driftTier = 0;
     }
-    if (c.drifting) { c.driftTime += dt; c.nitro = Math.min(1, c.nitro + 0.2 * dt); }
+    if (c.drifting) {
+      c.driftTime += dt; c.nitro = Math.min(1, c.nitro + 0.2 * dt);
+      let tier = 0; while (tier < 3 && c.driftTime >= DRIFT_TIER_T[tier]) tier++;
+      if (tier > c.driftTier) { c.driftTier = tier; c.events.push('tier'); }
+    }
 
     // yaw from bicycle model, limited by tyre grip
     const delta = c.steer * SM.steerMax(vF0);
@@ -104,8 +114,13 @@
     vF += ax * dt;
     c.ax = ax;
 
-    vL *= Math.exp(-(c.drifting ? 1.7 : off ? 4.5 : 9) * dt);
-    if (c.drifting) vF -= Math.abs(vL) * 0.25 * dt;
+    if (c.drifting) {
+      // in a drift the tyres swing the car's path round toward the nose instead of killing the sideways speed,
+      // so a long slide keeps its pace; a little scrub keeps it from being faster than gripping
+      const sp = Math.hypot(vF, vL), slip = Math.atan2(vL, vF) * Math.exp(-1.7 * dt);
+      vF = sp * Math.cos(slip); vL = sp * Math.sin(slip);
+      vF -= Math.abs(vL) * 0.5 * dt;
+    } else vL *= Math.exp(-(off ? 4.5 : 9) * dt);
 
     c.vx = fx * vF + lx * vL; c.vz = fz * vF + lz * vL;
     c.x += c.vx * dt; c.z += c.vz * dt;

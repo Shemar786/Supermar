@@ -5,7 +5,7 @@
   const $ = id => document.getElementById(id);
 
   // ---------------- input ----------------
-  const keys = {}, touch = { left: 0, right: 0, gas: 0, brake: 0, drift: 0, nitro: 0 };
+  const keys = {};
   const MAP = {
     ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left',
     ArrowRight: 'right', KeyD: 'right', Space: 'drift', ShiftLeft: 'nitro', ShiftRight: 'nitro', KeyN: 'nitro'
@@ -25,8 +25,9 @@
   let padPrev = {};
   SM.input = {
     read() {
-      let steer = (keys.right ? 1 : 0) - (keys.left ? 1 : 0) + touch.right - touch.left;
-      let throttle = keys.up || touch.gas ? 1 : 0;
+      const touch = SM.touch.read();
+      let steer = (keys.right ? 1 : 0) - (keys.left ? 1 : 0) + touch.steer;
+      let throttle = keys.up || touch.throttle ? 1 : 0;
       let brake = keys.down || touch.brake ? 1 : 0;
       let drift = !!(keys.drift || touch.drift), nitro = !!(keys.nitro || touch.nitro);
       let pads = [];
@@ -49,19 +50,6 @@
       return { steer: Math.max(-1, Math.min(1, steer)), throttle, brake, drift, nitro };
     }
   };
-
-  function bindTouch() {
-    document.querySelectorAll('[data-k]').forEach(el => {
-      const k = el.dataset.k;
-      const on = e => { e.preventDefault(); touch[k] = 1; el.classList.add('down'); try { el.setPointerCapture(e.pointerId); } catch (_) {} };
-      const off = e => { touch[k] = 0; el.classList.remove('down'); };
-      el.addEventListener('pointerdown', on);
-      el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off); el.addEventListener('lostpointercapture', off);
-    });
-    const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
-    if (coarse) document.body.classList.add('touch');
-    window.addEventListener('touchstart', () => document.body.classList.add('touch'), { once: true, passive: true });
-  }
 
   // ---------------- formatting ----------------
   const fmt = t => {
@@ -134,7 +122,7 @@
   let boardT = 0, flashT = 0;
   const ui = (SM.ui = {
     init() {
-      bindTouch();
+      SM.touch.init();
       const segs = $('rpmSegs');
       for (let i = 0; i < 18; i++) { const s = document.createElement('i'); if (i >= 15) s.className = 'red'; segs.appendChild(s); }
     },
@@ -183,7 +171,9 @@
       $('nitroFill').style.transform = 'scaleX(' + d.nitro.toFixed(3) + ')';
       $('nitroBar').classList.toggle('boost', d.boosting);
       $('nitroBar').classList.toggle('full', d.nitro > 0.98);
-      $('tags').textContent = d.draft ? 'SLIPSTREAM' : d.drifting ? 'DRIFT ' + d.driftTime.toFixed(1) + 's' : '';
+      const tags = $('tags'), tier = d.drifting ? d.driftTier : 0;
+      tags.textContent = d.draft ? 'SLIPSTREAM' : d.drifting ? (tier ? SM.TURBO_NAMES[tier] + ' READY' : 'DRIFT ' + d.driftTime.toFixed(1) + 's') : '';
+      tags.style.color = d.drifting ? SM.driftColors[tier] : '';
       $('wrong').hidden = !d.wrong;
       if (flashT > 0) { flashT -= dt; if (flashT <= 0) $('flash').classList.remove('on'); }
     },

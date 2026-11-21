@@ -1,3 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#07110b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Supermar">
 <title>Supermar Jamaica Run</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,14 +28,30 @@
   --ui: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
   --menu: "Saira Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
   color-scheme: dark;
+  /* safe areas for notches; swapped round when a phone held upright gets the game turned sideways */
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
 }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
   margin: 0; overflow: hidden; background: var(--ink); color: var(--paper);
   font-family: var(--ui); font-size: 15px; -webkit-font-smoothing: antialiased;
-  user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+  user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
+  overscroll-behavior: none;
 }
+#app { position: fixed; inset: 0; overflow: hidden; }
+/* phone held upright: turn the whole game 90° clockwise so it always plays in landscape */
+body.rot #app { inset: auto; top: 0; left: 100%; transform-origin: 0 0; transform: rotate(90deg); }
+body.rot {
+  --sat: env(safe-area-inset-right, 0px);
+  --sar: env(safe-area-inset-bottom, 0px);
+  --sab: env(safe-area-inset-left, 0px);
+  --sal: env(safe-area-inset-top, 0px);
+}
+body:not(.touch) [data-touch] { display: none !important; }
 #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; touch-action: none; }
 button { font: inherit; color: inherit; cursor: pointer; }
 button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
@@ -43,7 +69,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 /* ---------- system buttons (always visible) ---------- */
 #sys {
   position: fixed; z-index: 30; display: flex; gap: 8px;
-  top: calc(env(safe-area-inset-top, 0px) + 12px); right: calc(env(safe-area-inset-right, 0px) + 12px);
+  top: calc(var(--sat) + 12px); right: calc(var(--sar) + 12px);
 }
 .sysbtn {
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 7px 11px;
@@ -61,8 +87,8 @@ body:not(.racing) .race-only { display: none; }
 }
 .menu-in {
   display: grid; gap: 16px; max-width: 640px;
-  padding-block: calc(env(safe-area-inset-top, 0px) + 24px) calc(env(safe-area-inset-bottom, 0px) + 44px);
-  padding-left: max(52px, calc(env(safe-area-inset-left, 0px) + 16px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: calc(var(--sat) + 24px) calc(var(--sab) + 44px);
+  padding-left: max(52px, calc(var(--sal) + 16px)); padding-right: max(16px, var(--sar));
 }
 .logo { margin: 0; line-height: 0.84; }
 .logo b { display: block; font-family: var(--display); font-weight: 400; font-size: clamp(58px, 10vw, 132px); color: var(--red); text-shadow: 0 8px 34px rgba(0, 0, 0, 0.45); }
@@ -84,6 +110,8 @@ body:not(.racing) .race-only { display: none; }
 .mi .note { font-family: var(--ui); font-size: 15px; font-weight: 600; text-transform: none; color: var(--gold); }
 .mi.sub { font-size: clamp(19px, 2.2vw, 24px); padding-left: 50px; cursor: default; }
 .mi.sub::before { left: 26px; width: 6px; }
+.mi.set { padding-left: 24px; cursor: pointer; }
+.mi.set::before { left: 0; width: 6px; }
 .opt { display: inline-flex; align-items: center; }
 .opt button { background: none; border: 0; padding: 0 10px; font: inherit; color: inherit; opacity: 0.65; }
 .opt button:hover { opacity: 1; color: var(--gold); }
@@ -91,7 +119,7 @@ body:not(.racing) .race-only { display: none; }
 .mi.sel .opt b { color: var(--gold); }
 #menuDetail { margin: 0; min-height: 3em; max-width: 48ch; font-size: 16px; line-height: 1.5; color: rgba(242, 246, 238, 0.84); }
 .prompts {
-  position: fixed; right: max(24px, calc(env(safe-area-inset-right, 0px) + 16px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+  position: fixed; right: max(24px, calc(var(--sar) + 16px)); bottom: calc(var(--sab) + 28px);
   display: flex; gap: 20px; font-size: 13px; color: rgba(242, 246, 238, 0.72);
 }
 .prompts span { display: flex; align-items: center; gap: 5px; }
@@ -120,7 +148,7 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 6p
 
 /* ---------- HUD ---------- */
 #hud { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
-.tl { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 12px); left: calc(env(safe-area-inset-left, 0px) + 14px); display: grid; gap: 8px; width: 232px; }
+.tl { position: absolute; top: calc(var(--sat) + 12px); left: calc(var(--sal) + 14px); display: grid; gap: 8px; width: 232px; }
 .pos { display: flex; align-items: baseline; gap: 4px; font-family: var(--display); line-height: 1; text-shadow: 0 2px 10px rgba(0,0,0,0.5); }
 #posNum { font-size: 64px; color: var(--paper); }
 #posSuf { font-size: 24px; color: var(--gold); }
@@ -134,11 +162,11 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 6p
 #board li.me { background: rgba(215, 25, 42, 0.35); }
 #board li.me .nm { font-weight: 700; }
 #board .gap { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
-.tr { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 54px); right: calc(env(safe-area-inset-right, 0px) + 12px); display: grid; gap: 8px; justify-items: end; }
+.tr { position: absolute; top: calc(var(--sat) + 54px); right: calc(var(--sar) + 12px); display: grid; gap: 8px; justify-items: end; }
 #minimap { width: 168px; height: 168px; background: var(--panel); border-radius: 50%; }
 .tr .btns { display: flex; gap: 8px; pointer-events: auto; }
 .speedo {
-  position: absolute; right: calc(env(safe-area-inset-right, 0px) + 18px); bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+  position: absolute; right: calc(var(--sar) + 18px); bottom: calc(var(--sab) + 18px);
   width: 250px; background: var(--panel); border-radius: 8px; padding: 12px 14px; display: grid; gap: 8px;
 }
 .spd { display: flex; align-items: flex-end; justify-content: space-between; }
@@ -163,35 +191,77 @@ kbd { font-family: var(--ui); font-weight: 700; font-size: 12px; padding: 1px 6p
 #flash.on { opacity: 1; transform: translate(-50%, 0); }
 #flash.gold { color: var(--gold); }
 #flash.blue { color: var(--blue); }
+#flash.orange { color: #ffa31a; }
+#flash.pink { color: #e15bff; }
 #count { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); font-family: var(--display); font-size: clamp(90px, 18vw, 180px); opacity: 0; color: var(--paper); text-shadow: 0 6px 0 var(--ink); }
 #count.pop { animation: pop 0.95s ease-out forwards; }
 #count.go { color: var(--gold); text-shadow: 0 6px 0 var(--green); }
 @keyframes pop { 0% { opacity: 0; transform: translate(-50%, -50%) scale(1.7); } 15% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.92); } }
 #wrong { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); background: var(--red); padding: 8px 18px; border-radius: 6px; font-family: var(--display); font-size: 24px; }
 
-/* ---------- touch controls ---------- */
+/* ---------- touch controls: wheel or arrows under the left thumb, pedals under the right ---------- */
 #touch { display: none; }
 body.touch #touch { display: block; }
 .tbtn {
   position: absolute; pointer-events: auto; touch-action: none; display: grid; place-items: center;
-  background: rgba(7, 17, 11, 0.55); border: 2px solid rgba(242, 246, 238, 0.3); border-radius: 14px;
-  font-weight: 700; font-size: 13px; letter-spacing: 0.1em;
+  background: rgba(7, 17, 11, 0.5); border: 2px solid rgba(242, 246, 238, 0.28); border-radius: 16px;
+  font-weight: 700; font-size: 13px; letter-spacing: 0.1em; color: var(--paper); padding: 0;
 }
-.tbtn.down { background: rgba(254, 209, 0, 0.35); border-color: var(--gold); }
+.tbtn.down { background: rgba(254, 209, 0, 0.32); border-color: var(--gold); }
 .tbtn svg { width: 34px; height: 34px; fill: none; stroke: var(--paper); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-.t-left, .t-right { width: 86px; height: 86px; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); }
-.t-left { left: calc(env(safe-area-inset-left, 0px) + 16px); }
-.t-right { left: calc(env(safe-area-inset-left, 0px) + 114px); }
-.t-gas { right: calc(env(safe-area-inset-right, 0px) + 16px); bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); width: 92px; height: 130px; border-color: rgba(0, 155, 58, 0.8); }
-.t-brake { right: calc(env(safe-area-inset-right, 0px) + 120px); bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); width: 80px; height: 70px; }
-.t-drift { right: calc(env(safe-area-inset-right, 0px) + 120px); bottom: calc(env(safe-area-inset-bottom, 0px) + 100px); width: 80px; height: 50px; }
-.t-nitro { right: calc(env(safe-area-inset-right, 0px) + 16px); bottom: calc(env(safe-area-inset-bottom, 0px) + 160px); width: 92px; height: 54px; border-color: rgba(95, 184, 255, 0.8); }
-body.touch .speedo { right: 50%; transform: translateX(50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); width: 200px; padding: 8px 12px; }
-body.touch #speed { font-size: 40px; }
-body.touch #gear { width: 36px; height: 36px; font-size: 22px; }
+.t-left, .t-right { width: 92px; height: 92px; bottom: calc(var(--sab) + 16px); }
+.t-left { left: calc(var(--sal) + 14px); }
+.t-right { left: calc(var(--sal) + 116px); }
+body:not(.steer-buttons) .t-left, body:not(.steer-buttons) .t-right { display: none; }
+.t-gas { right: calc(var(--sar) + 14px); bottom: calc(var(--sab) + 14px); width: 104px; height: 116px; border-color: rgba(0, 155, 58, 0.85); }
+.t-drift { right: calc(var(--sar) + 126px); bottom: calc(var(--sab) + 14px); width: 100px; height: 84px; border-color: rgba(254, 209, 0, 0.6); }
+.t-brake { right: calc(var(--sar) + 126px); bottom: calc(var(--sab) + 106px); width: 100px; height: 52px; border-color: rgba(215, 25, 42, 0.8); }
+.t-nitro { right: calc(var(--sar) + 14px); bottom: calc(var(--sab) + 138px); width: 104px; height: 52px; border-color: rgba(95, 184, 255, 0.85); }
+.tbtn small { display: block; margin-top: 2px; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: var(--muted); }
+/* the steer zone is the whole lower-left of the screen; the wheel just shows where it is and how far it's turned */
+#steerZone { position: absolute; left: 0; bottom: 0; width: 40%; height: 64%; pointer-events: auto; touch-action: none; }
+body.steer-buttons #steerZone { display: none; }
+#wheel { position: absolute; left: calc(var(--sal) + 18px); bottom: calc(var(--sab) + 14px); width: 132px; height: 132px; opacity: 0.82; will-change: transform; }
+#steerZone.down #wheel { opacity: 1; }
+#wheel .rim { fill: none; stroke: rgba(7, 17, 11, 0.6); stroke-width: 15; }
+#wheel .grip { fill: none; stroke: var(--paper); stroke-width: 7; }
+#wheel .spoke { stroke: var(--paper); stroke-width: 6; stroke-linecap: round; }
+#wheel .hub { fill: rgba(7, 17, 11, 0.75); stroke: var(--paper); stroke-width: 3; }
+#wheel .mark { fill: var(--red); }
+#steerZone.down #wheel .grip, #steerZone.down #wheel .spoke { stroke: var(--gold); }
+.steer-hint { display: none; position: absolute; left: calc(var(--sal) + 4px); bottom: calc(var(--sab) + 152px); width: 160px; text-align: center; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: var(--paper); text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); }
+body.counting.steer-tilt .steer-hint.for-tilt, body.counting.steer-wheel .steer-hint.for-wheel { display: block; }
+body.touch .speedo { right: 50%; transform: translateX(50%); bottom: calc(var(--sab) + 10px); width: 172px; padding: 7px 11px; gap: 6px; }
+body.touch #speed { font-size: 34px; }
+body.touch #gear { width: 32px; height: 32px; font-size: 20px; }
+body.touch #tags { font-size: 11px; letter-spacing: 0.08em; white-space: nowrap; }
+/* keep the top of the screen clear of the pedals: map and buttons side by side, sound lives in the pause menu */
+body.touch.racing #sys { display: none; }
+body.touch .tr { top: calc(var(--sat) + 10px); right: calc(var(--sar) + 10px); display: flex; flex-direction: row-reverse; align-items: flex-start; gap: 8px; }
+body.touch .tr .btns { flex-direction: column; }
+body.touch #minimap { width: 96px; height: 96px; }
+body.touch #chaseStats { display: none; }
+body.touch .tl { top: calc(var(--sat) + 10px); width: 190px; gap: 6px; }
+body.touch #score { font-size: 30px; }
+body.touch #posNum { font-size: 44px; }
+body.touch .meter { padding: 6px 10px; }
+
+/* ---------- song lyrics, karaoke style ---------- */
+#lyric {
+  position: fixed; z-index: 22; pointer-events: none; display: flex; gap: 10px; align-items: baseline;
+  right: max(24px, calc(var(--sar) + 16px)); bottom: calc(var(--sab) + 64px); max-width: min(400px, 42%);
+  background: var(--panel); border-radius: 8px; padding: 9px 14px; font-size: 16px; font-weight: 600; line-height: 1.4;
+}
+#lyric .note { color: var(--gold); font-size: 18px; flex: none; }
+#lyricText span { color: rgba(242, 246, 238, 0.45); transition: color 0.15s; }
+#lyricText span.sung { color: var(--paper); }
+body.touch #lyric { bottom: calc(var(--sab) + 16px); }
+body.racing #lyric { right: auto; left: 50%; transform: translateX(-50%); bottom: calc(var(--sab) + 18px); max-width: min(460px, 46%); font-size: 14px; padding: 6px 12px; }
+body.touch.racing #lyric { top: calc(var(--sat) + 10px); bottom: auto; max-width: min(380px, 40%); font-size: 13px; }
+body.touch.racing:has(#goal:not([hidden])) #lyric { top: calc(var(--sat) + 62px); }
 
 /* ---------- overlays ---------- */
-.overlay { position: fixed; inset: 0; z-index: 25; display: grid; place-items: center; background: rgba(7, 17, 11, 0.62); overflow-y: auto; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); }
+.overlay { position: fixed; inset: 0; z-index: 25; display: grid; place-items: center; background: rgba(7, 17, 11, 0.62); overflow-y: auto; padding: 24px max(16px, var(--sar)) 24px max(16px, var(--sal)); }
 .card { width: min(560px, 100%); background: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 26px; display: grid; gap: 16px; }
 .card h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(24px, 5vw, 34px); line-height: 1.1; text-wrap: balance; }
 .card p { margin: 0; color: var(--muted); }
@@ -230,7 +300,7 @@ body.mode-chase [data-for="race"], body.mode-race [data-for="chase"] { display: 
 #bustRow.warn .bar { animation: pulse 0.3s infinite alternate; }
 .meter.eagle span { letter-spacing: 0.04em; font-size: 12px; color: var(--paper); }
 #goal {
-  position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 14px); transform: translateX(-50%);
+  position: absolute; left: 50%; top: calc(var(--sat) + 14px); transform: translateX(-50%);
   display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--gold); border-radius: 8px; padding: 6px 14px 6px 8px;
 }
 #goal svg { width: 34px; height: 34px; fill: var(--gold); }
@@ -251,7 +321,7 @@ body.mode-chase [data-for="race"], body.mode-race [data-for="chase"] { display: 
 @media (max-width: 760px) {
   #chaseStats { display: none; }
   #score { font-size: 32px; }
-  .menu-in { padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); }
+  .menu-in { padding-left: max(18px, var(--sal)); padding-bottom: calc(var(--sab) + 28px); }
   #menuDetail { font-size: 15px; }
   .keys { grid-template-columns: minmax(0, 1fr); }
   #board { display: none; }
@@ -259,10 +329,32 @@ body.mode-chase [data-for="race"], body.mode-race [data-for="chase"] { display: 
   #posNum { font-size: 46px; }
   #minimap { width: 118px; height: 118px; }
 }
-@media (max-height: 520px) { #board { display: none; } .tr { top: calc(env(safe-area-inset-top, 0px) + 48px); } #minimap { width: 110px; height: 110px; } }
+@media (max-height: 520px) {
+  #board { display: none; } .tr { top: calc(var(--sat) + 48px); } #minimap { width: 110px; height: 110px; }
+  .menu-in { gap: 8px; padding-block: calc(var(--sat) + 12px) calc(var(--sab) + 14px); }
+  .logo b { font-size: 50px; } .livery { margin-top: 8px; height: 5px; }
+  .mi { font-size: 24px; line-height: 1.08; } .mi.sub { font-size: 17px; }
+  #menuDetail { min-height: 0; font-size: 14px; }
+}
+/* a phone held upright is short and wide once turned, so it gets the same compact layout */
+body.rot #board { display: none; }
+body.rot .menu-in { gap: 8px; padding-block: calc(var(--sat) + 12px) calc(var(--sab) + 14px); padding-left: max(18px, calc(var(--sal) + 12px)); }
+body.rot .logo b { font-size: 50px; } body.rot .livery { margin-top: 8px; height: 5px; }
+body.rot .mi { font-size: 24px; line-height: 1.08; } body.rot .mi.sub { font-size: 17px; }
+body.rot #menuDetail { min-height: 0; font-size: 14px; }
+body.rot #flash { font-size: 26px; }
+body.rot #count { font-size: 110px; }
+@media (max-height: 360px) {
+  body.touch #wheel { width: 112px; height: 112px; }
+  body.touch .steer-hint { bottom: calc(var(--sab) + 130px); }
+  body.touch .t-gas { height: 100px; } body.touch .t-drift { height: 74px; }
+  body.touch .t-brake { bottom: calc(var(--sab) + 94px); height: 46px; } body.touch .t-nitro { bottom: calc(var(--sab) + 122px); height: 46px; }
+}
 @media (prefers-reduced-motion: reduce) { #count.pop { animation-duration: 0.01s; } #nitroBar.boost #nitroFill { animation: none; } }
 </style>
-
+</head>
+<body>
+<div id="app">
 <canvas id="game" tabindex="0" aria-label="Race view"></canvas>
 <div id="loading"><div class="logo"><b>SUPERMAR</b><i class="loadbar"></i><span id="loadMsg">Loading</span></div></div>
 <div id="nogl" hidden>This game needs WebGL. Try a recent version of Chrome, Edge, Firefox or Safari with hardware acceleration turned on.</div>
@@ -270,6 +362,7 @@ body.mode-chase [data-for="race"], body.mode-race [data-for="chase"] { display: 
 <div id="sys">
   <button id="muteBtn" class="sysbtn" type="button" aria-pressed="true">Sound on</button>
 </div>
+<div id="lyric" hidden aria-live="off"><span class="note" aria-hidden="true">♪</span><span id="lyricText"></span></div>
 
 <section id="menu" aria-label="Main menu">
   <div class="menu-in">
@@ -279,6 +372,9 @@ body.mode-chase [data-for="race"], body.mode-race [data-for="chase"] { display: 
       <button type="button" class="mi" data-item="race">Coast Race</button>
       <div class="mi sub" data-item="laps" data-for="race">Laps <span class="opt"><button type="button" data-step="laps" data-dir="-1" aria-label="Fewer laps">‹</button><b id="lapsVal">3</b><button type="button" data-step="laps" data-dir="1" aria-label="More laps">›</button></span></div>
       <div class="mi sub" data-item="diff" data-for="race">Rivals <span class="opt"><button type="button" data-step="diff" data-dir="-1" aria-label="Easier rivals">‹</button><b id="diffVal">Pro</b><button type="button" data-step="diff" data-dir="1" aria-label="Harder rivals">›</button></span></div>
+      <div class="mi sub set" data-item="music">Music <span class="opt"><button type="button" data-step="music" data-dir="-1" aria-label="Turn music on or off">‹</button><b id="musicVal">On</b><button type="button" data-step="music" data-dir="1" aria-label="Turn music on or off">›</button></span></div>
+      <div class="mi sub set" data-item="steer" data-touch>Steering <span class="opt"><button type="button" data-step="steer" data-dir="-1" aria-label="Previous steering mode">‹</button><b id="steerVal">Tilt</b><button type="button" data-step="steer" data-dir="1" aria-label="Next steering mode">›</button></span></div>
+      <div class="mi sub set" data-item="autogas" data-touch>Auto gas <span class="opt"><button type="button" data-step="autogas" data-dir="-1" aria-label="Toggle auto gas">‹</button><b id="gasVal">Off</b><button type="button" data-step="autogas" data-dir="1" aria-label="Toggle auto gas">›</button></span></div>
       <button type="button" class="mi" data-item="help">How to Play</button>
     </nav>
     <p id="menuDetail"></p>
@@ -289,6 +385,9 @@ body.mode-chase [data-for="race"], body.mode-race [data-for="chase"] { display: 
 <div id="help" class="overlay" hidden>
   <div class="card">
     <h3>How to play</h3>
+    <h4 data-touch>On a phone</h4>
+    <p class="help-text" data-touch>Hold your phone sideways. Tilt it like a steering wheel to steer, or put your left thumb on the wheel and slide it left or right. Your right thumb works the pedals, and you can slide it from one button to the next. DRIFT and NITRO keep the gas on, so you never have to hold two buttons with one thumb. Change Steering or turn on Auto gas on the title screen.</p>
+    <p class="help-text" data-touch>On iPhone, tap Share, then Add to Home Screen, to play full screen without the Safari bars.</p>
       <dl class="keys">
         <div><dt>Steer</dt><dd><kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd></dd></div>
         <div><dt>Gas</dt><dd><kbd>↑</kbd> or <kbd>W</kbd></dd></div>
@@ -306,7 +405,9 @@ body.mode-chase [data-for="race"], body.mode-race [data-for="chase"] { display: 
       <div><dt>Crate</dt><dd>150</dd></div><div><dt>Jerk drum</dt><dd>200</dd></div><div><dt>Barrier</dt><dd>250</dd></div><div><dt>Fruit cart</dt><dd>300</dd></div>
     </dl>
     <h4>Coast Race</h4>
-    <p class="help-text">Race five rivals around the coast road and finish first. Hold Space through a corner to drift. Drifting fills nitro, and letting go after 0.7 s fires a mini turbo. Tuck in behind a rival for a slipstream tow. Press gas just as the "1" fades for a perfect start.</p>
+    <p class="help-text">Race five rivals around the coast road and finish first. Tuck in behind a rival for a slipstream tow. Press gas just as the "1" fades for a perfect start.</p>
+    <h4>Drifting</h4>
+    <p class="help-text">Steer into a corner and hold Space (DRIFT on a phone) to slide. Drifting fills nitro, and the tyre sparks change colour as the drift charges: blue after 0.6 s, orange after 1.5 s, purple after 2.6 s. Let go to fire a Mini, Super or Ultra Turbo. Steer against the slide to widen it, or into it to tighten it.</p>
     <p class="help-text">Gamepads work too: RT gas, LT brake, A nitro, B drift.</p>
     <div class="acts"><button id="helpBack" class="bigbtn" type="button">Back</button></div>
   </div>
@@ -359,11 +460,22 @@ body.mode-chase [data-for="race"], body.mode-race [data-for="chase"] { display: 
   <div id="count"></div>
   <div id="wrong" hidden>WRONG WAY</div>
   <div id="touch">
+    <div id="steerZone" aria-label="Steering wheel. Slide left or right to steer.">
+      <svg id="wheel" viewBox="-50 -50 100 100" aria-hidden="true">
+        <circle class="rim" r="41"/>
+        <circle class="grip" r="41"/>
+        <path class="spoke" d="M-38 5L-12 5M38 5L12 5M0 14L0 38"/>
+        <circle class="hub" r="12"/>
+        <rect class="mark" x="-5" y="-49" width="10" height="11" rx="2"/>
+      </svg>
+    </div>
+    <div class="steer-hint for-tilt">TILT TO STEER</div>
+    <div class="steer-hint for-wheel">SLIDE TO STEER</div>
     <button class="tbtn t-left" type="button" data-k="left" aria-label="Steer left"><svg viewBox="0 0 24 24"><path d="M15 4L7 12L15 20"/></svg></button>
     <button class="tbtn t-right" type="button" data-k="right" aria-label="Steer right"><svg viewBox="0 0 24 24"><path d="M9 4L17 12L9 20"/></svg></button>
     <button class="tbtn t-gas" type="button" data-k="gas">GAS</button>
     <button class="tbtn t-brake" type="button" data-k="brake">BRAKE</button>
-    <button class="tbtn t-drift" type="button" data-k="drift">DRIFT</button>
+    <button class="tbtn t-drift" type="button" data-k="drift"><span>DRIFT<small>hold in turns</small></span></button>
     <button class="tbtn t-nitro" type="button" data-k="nitro">NITRO</button>
   </div>
 </div>
@@ -376,6 +488,7 @@ body.mode-chase [data-for="race"], body.mode-race [data-for="chase"] { display: 
       <button id="resumeBtn" class="bigbtn" type="button">Resume</button>
       <button id="restartBtn" class="ghost" type="button">Restart</button>
       <button id="quitBtn" class="ghost" type="button">Race setup</button>
+      <button id="pauseMuteBtn" class="ghost" type="button" aria-pressed="true" data-touch>Sound on</button>
     </div>
   </div>
 </div>
@@ -414,15 +527,17 @@ body.mode-chase [data-for="race"], body.mode-race [data-for="chase"] { display: 
     </div>
   </div>
 </div>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
   // Wait briefly for the display fonts so the banners and billboards are drawn with them, then boot the game in order.
   (function () {
-    var files = ['world.js', 'city.js', 'cars.js', 'audio.js', 'physics.js', 'ui.js', 'chase.js', 'game.js'];
+    // bump VERSION on each release so phones don't mix a new page with old cached scripts
+    var VERSION = '5', files = ['world.js', 'city.js', 'cars.js', 'audio.js', 'song.js', 'physics.js', 'touch.js', 'ui.js', 'chase.js', 'game.js'];
     function boot() {
       if (!window.THREE) { document.getElementById('loading').textContent = 'Could not load the 3D engine. Check your connection and reload.'; return; }
-      files.forEach(function (f) { var s = document.createElement('script'); s.src = f; s.async = false; document.body.appendChild(s); });
+      files.forEach(function (f) { var s = document.createElement('script'); s.src = f + '?v=' + VERSION; s.async = false; document.body.appendChild(s); });
     }
     var fonts = document.fonts && document.fonts.load
       ? Promise.all([document.fonts.load('400 40px Bungee'), document.fonts.load('600 30px "Chakra Petch"'), document.fonts.load('700 30px "Chakra Petch"')])
@@ -430,3 +545,5 @@ body.mode-chase [data-for="race"], body.mode-race [data-for="chase"] { display: 
     Promise.race([fonts, new Promise(function (r) { setTimeout(r, 2000); })]).then(boot, boot);
   })();
 </script>
+</body>
+</html>
